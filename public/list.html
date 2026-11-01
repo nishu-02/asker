@@ -2,13 +2,14 @@
 <style>body{font:14px system-ui;margin:0;padding:12px}a{display:inline-block;margin-bottom:8px}div{overflow:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}th{background:#eee}</style></head><body>
 <a href="/">← Back</a> <a href="#" id="csv">Download CSV</a><div><table id="tb"></table></div>
 <script>
-const cols = ['name','company','role','what_they_do','needs','meet_again','notes'];
+const cols = ['name','company','role','contact_info','what_they_do','needs','timeline_budget','decision_maker','priority','meet_again','next_step','follow_up_owner','notes'];
 fetch('/api/contacts', { headers: { 'x-pin': localStorage.pin } }).then(r => r.json()).then(rows => {
   if (!Array.isArray(rows)) return tb.outerHTML = 'Bad PIN';
   const cell = (v) => v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v;
-  const data = rows.map(c => [c.met_by, c.created_at, ...cols.map(k => cell(c.fields[k]))]);
-  const head = ['met_by','when',...cols];
-  tb.innerHTML = '<tr>' + head.map(h => `<th>${h}</th>`).join('') + '</tr>' + data.map(r => '<tr>' + r.map(v => `<td>${String(v).replace(/</g,'&lt;')}</td>`).join('') + '</tr>').join('');
+  const data = rows.map(c => [c.id, c.met_by, c.created_at, ...cols.map(k => cell(c.fields[k]))]);
+  const photos = rows.map(c => c.photos.map((f, i) => `<a href="/photo/${f}?pin=${encodeURIComponent(localStorage.pin)}" target="_blank">photo${i+1}</a>`).join(' '));
+  const head = ['id','met_by','when',...cols];
+  tb.innerHTML = '<tr>' + head.map(h => `<th>${h}</th>`).join('') + '<th>photos</th></tr>' + data.map((r, i) => '<tr>' + r.map(v => `<td>${String(v).replace(/</g,'&lt;')}</td>`).join('') + `<td>${photos[i]}</td></tr>`).join('');
   csv.href = 'data:text/csv,' + encodeURIComponent([head, ...data].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')); csv.download = 'contacts.csv';
 });
 </script></body></html>
