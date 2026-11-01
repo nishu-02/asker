@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-const { PORT = 3000, PIN = '1234', LLM_URL = 'http://localhost:11434/v1', LLM_KEY = '', LLM_MODEL = 'hermes3' } = process.env;
+const { PORT = 3000, PIN = '1234', LLM_URL = 'http://localhost:11434/v1', LLM_KEY = '', LLM_MODEL = 'hermes3', LLM_FALLBACK_MODEL = '', WORKSPACE_ID = '' } = process.env;
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf' };
 const TYPE = Object.fromEntries(Object.entries(EXT).map(([t, e]) => [e, t]));
 const PHOTOS = (process.env.DB_PATH || 'contacts.db').replace(/[^/]*$/, '') + 'photos';
@@ -27,13 +27,25 @@ When you know name, company, what_they_do, next_step and meet_again (or the user
 Reply ONLY with JSON: {"reply":"...","fields":{...},"done":false}`;
 
 async function ask(messages, image) {
+  const models = [LLM_MODEL, LLM_FALLBACK_MODEL].filter(Boolean);
+  let err;
+  for (const model of models) {
+    for (let i = 0; i < 2; i++) {
+      try { return await call(model, messages, image); }
+      catch (e) { err = e; if (![429, 500, 502, 503, 504].includes(e.status)) throw e; await new Promise((ok) => setTimeout(ok, 700 * (i + 1))); }
+    }
+  }
+  throw err;
+}
+
+async function call(model, messages, image) {
   if (image) messages = [...messages.slice(0, -1), { role: 'user', content: [{ type: 'text', text: messages.at(-1).content }, { type: 'image_url', image_url: { url: image } }] }];
   const r = await fetch(`${LLM_URL}/chat/completions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${LLM_KEY}` },
-    body: JSON.stringify({ model: LLM_MODEL, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SYSTEM }, ...messages] }),
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${LLM_KEY}`, ...(WORKSPACE_ID && { "anthropic-workspace-id": WORKSPACE_ID }) },
+    body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SYSTEM }, ...messages] }),
   });
-  if (!r.ok) throw new Error(`LLM ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw Object.assign(new Error(`LLM ${r.status}: ${await r.text()}`), { status: r.status });
   const text = (await r.json()).choices[0].message.content;
   try { return JSON.parse(text.replace(/^```(?:json)?|```$/gm, '').trim()); }
   catch { return { reply: text, fields: {}, done: false }; }
