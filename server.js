@@ -27,12 +27,16 @@ When you know name, company, what_they_do, next_step and meet_again (or the user
 Reply ONLY with JSON: {"reply":"...","fields":{...},"done":false}`;
 
 async function ask(messages, image) {
-  const models = [LLM_MODEL, LLM_FALLBACK_MODEL].filter(Boolean);
+  const models = [LLM_MODEL, ...LLM_FALLBACK_MODEL.split(',')].map((m) => m.trim().replace(/["'\s]|^models\//g, '')).filter(Boolean);
   let err;
   for (const model of models) {
     for (let i = 0; i < 2; i++) {
       try { return await call(model, messages, image); }
-      catch (e) { err = e; if (![429, 500, 502, 503, 504].includes(e.status)) throw e; await new Promise((ok) => setTimeout(ok, 700 * (i + 1))); }
+      catch (e) {
+        err = e; console.error(`model ${model} failed: ${String(e.message).slice(0, 200)}`);
+        if (![429, 500, 502, 503, 504].includes(e.status)) break;
+        await new Promise((ok) => setTimeout(ok, 700 * (i + 1)));
+      }
     }
   }
   throw err;
