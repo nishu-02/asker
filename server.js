@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const { PORT = 3000, PIN = '1234', LLM_URL = 'http://localhost:11434/v1', LLM_KEY = '', LLM_MODEL = 'hermes3', LLM_FALLBACK_MODEL = '', WORKSPACE_ID = '' } = process.env;
+const FIELDS = ['name', 'company', 'role', 'contact_info', 'what_they_do', 'needs', 'timeline_budget', 'decision_maker', 'priority', 'meet_again', 'next_step', 'follow_up_owner', 'notes'];
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf' };
 const TYPE = Object.fromEntries(Object.entries(EXT).map(([t, e]) => [e, t]));
 const PHOTOS = (process.env.DB_PATH || 'contacts.db').replace(/[^/]*$/, '') + 'photos';
@@ -89,6 +90,16 @@ http.createServer(async (req, res) => {
       if (req.url === '/api/contacts') {
         const files = fs.existsSync(PHOTOS) ? fs.readdirSync(PHOTOS) : [];
         return json(res, 200, db.prepare('SELECT id, met_by, fields, created_at FROM contacts ORDER BY id DESC').all().map((c) => ({ ...c, fields: JSON.parse(c.fields), photos: files.filter((f) => f.startsWith(`${c.id}-`)) })));
+      }
+      const edit = req.url.match(/^\/api\/contact\/(\d+)$/);
+      if (edit && req.method === 'PUT') {
+        const row = db.prepare('SELECT fields FROM contacts WHERE id=?').get(edit[1]);
+        if (!row) return json(res, 404, { error: 'not found' });
+        const { fields = {} } = await body(req);
+        const merged = JSON.parse(row.fields);
+        for (const k of FIELDS) { const v = String(fields[k] ?? '').trim().slice(0, 2000); if (v) merged[k] = v; else delete merged[k]; }
+        db.prepare('UPDATE contacts SET fields=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(JSON.stringify(merged), edit[1]);
+        return json(res, 200, { fields: merged });
       }
       if (req.url === '/api/chat' && req.method === 'POST') {
         const { id, met_by, message } = await body(req);

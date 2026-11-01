@@ -1,15 +1,68 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Contacts</title>
-<style>body{font:14px system-ui;margin:0;padding:12px}a{display:inline-block;margin-bottom:8px}div{overflow:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}th{background:#eee}</style></head><body>
-<a href="/">← Back</a> <a href="#" id="csv">Download CSV</a><div><table id="tb"></table></div>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Contacts</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px system-ui;background:#f4f5f7}
+header{position:sticky;top:0;z-index:2;display:flex;gap:8px;padding:10px 12px;background:#111}
+header a,header input{font:inherit;border-radius:8px;border:0;padding:10px 12px}header a{background:#333;color:#fff;text-decoration:none;white-space:nowrap}header input{flex:1;min-width:0}
+#list{padding:12px;display:flex;flex-direction:column;gap:10px}
+.c{background:#fff;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.c .top{display:flex;gap:8px;align-items:center}.c .name{flex:1;font:600 17px system-ui;text-align:left;background:#2563eb;color:#fff;border:0;border-radius:10px;padding:14px;min-height:48px}
+.c .name.empty{background:#888}.tag{font-size:13px;padding:4px 8px;border-radius:99px;background:#eee}.hot{background:#fecaca}.warm{background:#fde68a}.cold{background:#bfdbfe}
+.c small{color:#555}.c a{color:#2563eb;margin-right:10px}
+dialog{width:min(100%,520px);max-height:92dvh;border:0;border-radius:16px;padding:0}dialog::backdrop{background:#0008}
+form{display:flex;flex-direction:column;gap:10px;padding:16px}label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#555}
+input,textarea,select{font:16px system-ui;padding:12px;border:1px solid #ccc;border-radius:10px;width:100%}
+.bar{position:sticky;bottom:0;display:flex;gap:8px;padding-top:8px;background:#fff}.bar button{flex:1;font:600 16px system-ui;border:0;border-radius:10px;padding:14px}#save{background:#111;color:#fff}#cancel{background:#eee}
+</style></head><body>
+<header><a href="/">←</a><input id="q" type="search" placeholder="Search"><a href="#" id="csv">CSV</a></header>
+<div id="list"></div>
+<dialog id="d"><form id="f" method="dialog"><div id="fields"></div><div id="ph"></div><div class="bar"><button type="button" id="cancel">Cancel</button><button id="save">Save</button></div></form></dialog>
 <script>
-const cols = ['name','company','role','contact_info','what_they_do','needs','timeline_budget','decision_maker','priority','meet_again','next_step','follow_up_owner','notes'];
-fetch('/api/contacts', { headers: { 'x-pin': localStorage.pin } }).then(r => r.json()).then(rows => {
-  if (!Array.isArray(rows)) return tb.outerHTML = 'Bad PIN';
-  const cell = (v) => v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v;
-  const data = rows.map(c => [c.id, c.met_by, c.created_at, ...cols.map(k => cell(c.fields[k]))]);
-  const photos = rows.map(c => c.photos.map((f, i) => `<a href="/photo/${f}?pin=${encodeURIComponent(localStorage.pin)}" target="_blank">photo${i+1}</a>`).join(' '));
-  const head = ['id','met_by','when',...cols];
-  tb.innerHTML = '<tr>' + head.map(h => `<th>${h}</th>`).join('') + '<th>photos</th></tr>' + data.map((r, i) => '<tr>' + r.map(v => `<td>${String(v).replace(/</g,'&lt;')}</td>`).join('') + `<td>${photos[i]}</td></tr>`).join('');
-  csv.href = 'data:text/csv,' + encodeURIComponent([head, ...data].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')); csv.download = 'contacts.csv';
-});
+const COLS = ['name','company','role','contact_info','what_they_do','needs','timeline_budget','decision_maker','priority','meet_again','next_step','follow_up_owner','notes'];
+const OPTS = { decision_maker: ['yes','no','unknown'], priority: ['hot','warm','cold'], meet_again: ['yes','no','maybe'] };
+const LONG = ['what_they_do','needs','next_step','notes'];
+const pin = localStorage.pin, H = { 'x-pin': pin, 'content-type': 'application/json' };
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let rows = [], cur = null;
+const photoLinks = (c) => c.photos.map((f, i) => `<a href="/photo/${f}?pin=${encodeURIComponent(pin)}" target="_blank">photo${i + 1}</a>`).join('');
+function draw() {
+  const q = document.getElementById('q').value.toLowerCase();
+  document.getElementById('list').innerHTML = rows.filter((c) => !q || JSON.stringify(c.fields).toLowerCase().includes(q)).map((c) => `<div class="c">
+    <div class="top"><button class="name ${c.fields.name ? '' : 'empty'}" data-id="${c.id}">${esc(c.fields.name || '(no name) tap to edit')} ✎</button>${c.fields.priority ? `<span class="tag ${esc(c.fields.priority)}">${esc(c.fields.priority)}</span>` : ''}</div>
+    <div>${esc([c.fields.role, c.fields.company].filter(Boolean).join(' · '))}</div>
+    <small>${esc(c.fields.next_step || c.fields.what_they_do || '')}</small>
+    <small>#${c.id} · ${esc(c.met_by)} · ${esc(c.created_at)} · meet again: ${esc(c.fields.meet_again || '?')}</small>
+    <div>${photoLinks(c)}</div></div>`).join('') || 'No contacts yet';
+}
+function csvLink() {
+  const head = ['id','met_by','when',...COLS], data = rows.map((c) => [c.id, c.met_by, c.created_at, ...COLS.map((k) => c.fields[k] ?? '')]);
+  const csv = document.getElementById('csv');
+  csv.href = 'data:text/csv,' + encodeURIComponent([head, ...data].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')); csv.download = 'contacts.csv';
+}
+async function load() {
+  const r = await fetch('/api/contacts', { headers: H }); const j = await r.json();
+  if (!Array.isArray(j)) return (document.getElementById('list').textContent = 'Bad PIN');
+  rows = j; draw(); csvLink();
+}
+document.getElementById('q').oninput = draw;
+document.getElementById('list').onclick = (e) => {
+  const b = e.target.closest('.name'); if (!b) return;
+  cur = rows.find((c) => c.id == b.dataset.id);
+  document.getElementById('fields').innerHTML = COLS.map((k) => {
+    const v = cur.fields[k] ?? '', label = k.replace(/_/g, ' ');
+    const input = OPTS[k] ? `<select name="${k}"><option value=""></option>${OPTS[k].map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+      : LONG.includes(k) ? `<textarea name="${k}" rows="3">${esc(v)}</textarea>` : `<input name="${k}" value="${esc(v)}">`;
+    return `<label>${label}${input}</label>`;
+  }).join('');
+  document.getElementById('ph').innerHTML = photoLinks(cur);
+  document.getElementById('d').showModal();
+};
+document.getElementById('cancel').onclick = () => document.getElementById('d').close();
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault();
+  const fields = Object.fromEntries(new FormData(document.getElementById('f')));
+  const r = await fetch('/api/contact/' + cur.id, { method: 'PUT', headers: H, body: JSON.stringify({ fields }) });
+  if (!r.ok) return alert('Save failed: ' + (await r.json()).error);
+  cur.fields = (await r.json()).fields; draw(); csvLink(); document.getElementById('d').close();
+};
+load();
 </script></body></html>
