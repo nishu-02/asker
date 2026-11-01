@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Event Contacts</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px system-ui;display:flex;flex-direction:column;height:100dvh;background:#f4f5f7}
+header{display:flex;gap:8px;align-items:center;padding:10px 12px;background:#111;color:#fff}header b{flex:1}
+header button,header a{background:#333;color:#fff;border:0;border-radius:8px;padding:8px 12px;font:inherit;text-decoration:none}
+#log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:10px 12px;border-radius:14px;white-space:pre-wrap}.u{align-self:flex-end;background:#2563eb;color:#fff}.a{background:#fff}
+form{display:flex;gap:8px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#fff}
+input{flex:1;font:inherit;padding:12px;border:1px solid #ccc;border-radius:10px;min-width:0}
+form button{border:0;border-radius:10px;padding:0 14px;font-size:20px;background:#111;color:#fff}
+</style></head><body>
+<header><b id="who"></b><button id="new">+ New</button><a href="list.html">List</a></header>
+<div id="log"></div>
+<form id="f"><input id="t" placeholder="Who did you meet?" autocomplete="off"><button type="button" id="mic">🎤</button><button>➤</button></form>
+<script>
+const ls = (k, p) => localStorage[k] || (localStorage[k] = prompt(p));
+const pin = ls('pin', 'Team PIN'), me = ls('me', 'Your name');
+who.textContent = me;
+let id = null;
+const add = (c, t) => { const d = document.createElement('div'); d.className = 'm ' + c; d.textContent = t; log.append(d); log.scrollTop = 1e9; return d; };
+const reset = () => { id = null; log.innerHTML = ''; add('a', 'Who did you just meet?'); };
+reset(); document.getElementById("new").onclick = reset;
+f.onsubmit = async (e) => {
+  e.preventDefault();
+  const message = t.value.trim(); if (!message) return;
+  t.value = ''; add('u', message); const wait = add('a', '…');
+  try {
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'x-pin': pin, 'content-type': 'application/json' }, body: JSON.stringify({ id, met_by: me, message }) });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    id = j.id; wait.textContent = j.reply; if (j.done) id = null;
+  } catch (err) { wait.textContent = '⚠ ' + err.message + ' (resend)'; if (String(err.message).includes('pin')) delete localStorage.pin; }
+};
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) mic.hidden = true; else mic.onclick = () => { const s = new SR(); s.onresult = (e) => { t.value += e.results[0][0].transcript; f.requestSubmit(); }; s.start(); };
+</script></body></html>

@@ -1,0 +1,13 @@
+services:
+  contacts:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3000
+    ports:
+      - "${BIND:-127.0.0.1}:${HOST_PORT:-47831}:3000"
+    volumes:
+      - contacts-data:/data
+volumes:
+  contacts-data:
