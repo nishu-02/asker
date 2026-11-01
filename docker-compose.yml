@@ -9,5 +9,6 @@ services:
       - "${BIND:-127.0.0.1}:${HOST_PORT:-47831}:3000"
     volumes:
       - contacts-data:/data
+      - ./backups:/backups:z
 volumes:
   contacts-data:

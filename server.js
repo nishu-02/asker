@@ -8,6 +8,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS contacts (
   id INTEGER PRIMARY KEY, met_by TEXT, fields TEXT DEFAULT '{}', messages TEXT DEFAULT '[]',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
 
+fs.mkdirSync('/backups', { recursive: true });
+setInterval(() => {
+  const f = `/backups/contacts-${new Date().getHours()}.db`;
+  try { fs.rmSync(f, { force: true }); db.exec(`VACUUM INTO '${f}'`); } catch (e) { console.error('backup failed', e.message); }
+}, 5 * 60 * 1000);
+
 const SYSTEM = `You are a fast assistant helping a senior executive of a services company log a person they just met at an event.
 Extract: name, company, role, what_they_do, needs (what they might need from us), meet_again (yes/no/maybe), notes.
 Ask ONE short follow-up question at a time about the most important missing field (always ask meet_again before finishing). Never ask more than one question.
@@ -39,11 +45,12 @@ http.createServer(async (req, res) => {
       if (req.url === '/api/chat' && req.method === 'POST') {
         const { id, met_by, message } = await body(req);
         let row = id && db.prepare('SELECT * FROM contacts WHERE id=?').get(id);
-        if (!row) row = db.prepare('INSERT INTO contacts (met_by) VALUES (?) RETURNING *').get(met_by);
+        if (!row) row = { messages: '[]', fields: '{}' };
         const msgs = [...JSON.parse(row.messages), { role: 'user', content: message }];
         const out = await ask(msgs);
         msgs.push({ role: 'assistant', content: JSON.stringify(out) });
         const fields = { ...JSON.parse(row.fields), ...out.fields };
+        if (!row.id) row.id = db.prepare('INSERT INTO contacts (met_by) VALUES (?) RETURNING id').get(met_by).id;
         db.prepare("UPDATE contacts SET fields=?, messages=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(JSON.stringify(fields), JSON.stringify(msgs), row.id);
         return json(res, 200, { id: row.id, reply: out.reply, fields, done: !!out.done });
       }

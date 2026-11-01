@@ -1,3 +1,4 @@
 .env
 contacts.db*
 node_modules
+backups
