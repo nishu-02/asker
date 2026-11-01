@@ -7,12 +7,12 @@ header button,header a{background:#333;color:#fff;border:0;border-radius:8px;pad
 #log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
 .m{max-width:85%;padding:10px 12px;border-radius:14px;white-space:pre-wrap}.u{align-self:flex-end;background:#2563eb;color:#fff}.a{background:#fff}
 form{display:flex;gap:8px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#fff}
-input{flex:1;font:inherit;padding:12px;border:1px solid #ccc;border-radius:10px;min-width:0}
+textarea{flex:1;font:inherit;padding:12px;border:1px solid #ccc;border-radius:10px;min-width:0;resize:none;max-height:35dvh}
 form button{border:0;border-radius:10px;padding:0 14px;font-size:20px;background:#111;color:#fff}
 </style></head><body>
 <header><b id="who"></b><button id="new">+ New</button><a href="list.html">List</a></header>
 <div id="log"></div>
-<form id="f"><input id="t" placeholder="Who did you meet?" autocomplete="off"><button type="button" id="cam">📷</button><input type="file" id="pic" accept="image/*,application/pdf" hidden><button type="button" id="mic">🎤</button><button>➤</button></form>
+<form id="f"><textarea id="t" rows="1" placeholder="Who did you meet?"></textarea><button type="button" id="cam">📷</button><input type="file" id="pic" accept="image/*,application/pdf" hidden><button type="button" id="mic">🎤</button><button>➤</button></form>
 <script>
 const ls = (k, p) => localStorage[k] || (localStorage[k] = prompt(p));
 const pin = ls('pin', 'Team PIN'), me = ls('me', 'Your name');
@@ -24,7 +24,7 @@ reset(); document.getElementById("new").onclick = reset;
 f.onsubmit = async (e) => {
   e.preventDefault();
   const message = t.value.trim(); if (!message) return;
-  t.value = ''; add('u', message); const wait = add('a', '…');
+  t.value = ''; t.style.height = ''; add('u', message); const wait = add('a', '…');
   try {
     const r = await fetch('/api/chat', { method: 'POST', headers: { 'x-pin': pin, 'content-type': 'application/json' }, body: JSON.stringify({ id, met_by: me, message }) });
     const j = await r.json(); if (!r.ok) throw new Error(j.error);
@@ -32,6 +32,7 @@ f.onsubmit = async (e) => {
   } catch (err) { wait.textContent = '⚠ ' + err.message + ' (resend)'; if (String(err.message).includes('pin')) delete localStorage.pin; }
 };
 cam.onclick = () => pic.click();
+t.oninput = () => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
 const raw = (f) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(f); });
 pic.onchange = async () => {
   const file = pic.files[0]; pic.value = ''; if (!file) return;
